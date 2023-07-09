@@ -9,4 +9,4 @@ You can directly run the code through Gitpod
 Each Algorithm Consist of 2 Experiment code. The result of each algorithm experiment will be shown in `result/` folder
 
 ## Simulation Code
-For the algorithm implementation into CloudSim Plus will be shown in `TASimulation/` folder
+For the algorithm implementation into CloudSim Plus will be shown in `src/main/java/org/cloudsimplus/examples/TASimulation/` folder
