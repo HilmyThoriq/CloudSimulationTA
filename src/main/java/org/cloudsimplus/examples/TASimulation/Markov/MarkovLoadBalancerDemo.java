@@ -33,7 +33,7 @@ import java.math.MathContext;
 import java.math.RoundingMode;
 
 
-public class MarkovLoadBalancer{
+public class MarkovLoadBalancerDemo{
 	protected double Q;
 	protected double alpha;
 	protected double beta;
@@ -42,7 +42,7 @@ public class MarkovLoadBalancer{
 	protected int ant;
 	protected Random r;
 
-	public List<Cloudlet> getAllocatedNewCloudlets(List<Cloudlet> newCloudlets,List<Vm> vmList, Integer initialCloudlets) throws FileNotFoundException{
+	public List<Cloudlet> getAllocatedNewCloudlets(List<Cloudlet> newCloudlets,List<Vm> vmList, Integer initialCloudlets, List<Integer> lkVM) throws FileNotFoundException{
 
         int i = 0;
         int currentDistribution[] = new int[vmList.size()];
@@ -56,7 +56,7 @@ public class MarkovLoadBalancer{
         Double maxComPow = getMaxComPow(vmList);
         List<Double> facProcCap = getFacProcCap(vmList, maxComPow);
         List<Double> maxProcCap = getMaxProcCap(expProcCapLB, facProcCap);
-        List<Double> expProcCapVM = getExpProcCapVM(maxProcCap, lk);
+        List<Double> expProcCapVM = getExpProcCapVM(maxProcCap, lkVM);
         List<Double> distFac = getDistFac(expProcCapLB, expProcCapVM, taskDistProb);
         BigDecimal Fn = getFn(newCloudlets.size(), vmList.size(), i, currentDistribution, distFac, memo);
         BigDecimal Fn_1 = getFn_1(newCloudlets.size() - 1, vmList.size(), i, currentDistribution, distFac, memo2);
@@ -75,7 +75,7 @@ public class MarkovLoadBalancer{
         List<Double> taskDistProbAfter = getTaskDistProbAfter(workloadPerVM, expProcCapLB);
         List<Double> expUtilVMAfter = getExpUtilVMAfter(expUtilLB,expProcCapLB,expProcCapAfter, taskDistProbAfter);
 
-        System.out.println("This is lk: " + lk);
+        System.out.println("This is lk: " + lkVM);
         System.out.println("This is expProCapLB: " + expProcCapLB);
         System.out.println("This is maxComPow: " + maxComPow);
         System.out.println("This is facProcCap: " + facProcCap);
@@ -147,13 +147,13 @@ public class MarkovLoadBalancer{
         return maxProcCap;
     }
 
-    protected List<Double> getExpProcCapVM(List<Double> maxProcCap, int lk){
+    protected List<Double> getExpProcCapVM(List<Double> maxProcCap, List<Integer> lkVM){
         // Calculating Expected Processing Capacity of VMk
         // Miu k
         List<Double> expProcCapVM = new ArrayList<>();
         
         for (int i = 0; i < maxProcCap.size(); i++) {
-            Double value = maxProcCap.get(i) - lk;
+            Double value = maxProcCap.get(i) - lkVM.get(i);
             expProcCapVM.add(Math.round(value * 10.0) / 10.0);
         }
         return expProcCapVM;

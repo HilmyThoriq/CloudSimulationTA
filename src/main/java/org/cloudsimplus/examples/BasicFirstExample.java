@@ -38,6 +38,7 @@ import org.cloudsimplus.resources.PeSimple;
 import org.cloudsimplus.utilizationmodels.UtilizationModelDynamic;
 import org.cloudsimplus.vms.Vm;
 import org.cloudsimplus.vms.VmSimple;
+import org.cloudsimplus.schedulers.cloudlet.CloudletSchedulerSpaceShared;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -62,10 +63,10 @@ public class BasicFirstExample {
     private static final long HOST_STORAGE = 1_000_000; //in Megabytes
 
     private static final int VMS = 2;
-    private static final int VM_PES = 4;
+    private static final int VM_PES = 2;
 
     private static final int CLOUDLETS = 4;
-    private static final int CLOUDLET_PES = 2;
+    private static final int CLOUDLET_PES = 1;
     private static final int CLOUDLET_LENGTH = 10_000; // Milion Instructions (MI)
 
     private final CloudSimPlus simulation;
@@ -137,7 +138,7 @@ public class BasicFirstExample {
         for (int i = 0; i < VMS; i++) {
             //Uses a CloudletSchedulerTimeShared by default to schedule Cloudlets
             final var vm = new VmSimple(HOST_MIPS, VM_PES);
-            vm.setRam(512).setBw(1000).setSize(10_000);
+            vm.setRam(512).setBw(1000).setSize(10_000).setCloudletScheduler(new CloudletSchedulerSpaceShared());
             vmList.add(vm);
         }
 
@@ -152,10 +153,11 @@ public class BasicFirstExample {
 
         //UtilizationModel defining the Cloudlets use only 50% of any resource all the time
         final var utilizationModel = new UtilizationModelDynamic(0.5);
+        final var utilizationModelCPU = new UtilizationModelDynamic(1);
 
         for (int i = 0; i < CLOUDLETS; i++) {
             final var cloudlet = new CloudletSimple(CLOUDLET_LENGTH, CLOUDLET_PES, utilizationModel);
-            cloudlet.setSizes(1024);
+            cloudlet.setSizes(1024).setUtilizationModelCpu(utilizationModelCPU);
             cloudletList.add(cloudlet);
         }
 

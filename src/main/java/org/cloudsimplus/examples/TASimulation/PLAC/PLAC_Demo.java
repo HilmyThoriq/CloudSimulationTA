@@ -21,8 +21,9 @@
  *     You should have received a copy of the GNU General Public License
  *     along with CloudSim Plus. If not, see <http://www.gnu.org/licenses/>.
  */
-package org.cloudsimplus.examples.TASimulation.Markov;
+package org.cloudsimplus.examples.TASimulation.PLAC;
 
+import org.apache.commons.math3.linear.Array2DRowFieldMatrix;
 import org.cloudsimplus.brokers.DatacenterBroker;
 import org.cloudsimplus.brokers.DatacenterBrokerSimple;
 import org.cloudsimplus.builders.tables.CloudletsTableBuilder;
@@ -32,6 +33,7 @@ import org.cloudsimplus.cloudlets.CloudletSimple;
 import org.cloudsimplus.core.CloudSimPlus;
 import org.cloudsimplus.datacenters.Datacenter;
 import org.cloudsimplus.datacenters.DatacenterSimple;
+import org.cloudsimplus.examples.TASimulation.PLAC.PLACLoadBalancer;
 import org.cloudsimplus.hosts.Host;
 import org.cloudsimplus.hosts.HostSimple;
 import org.cloudsimplus.resources.Pe;
@@ -45,7 +47,7 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.PrintStream;
 import java.util.*;
-import org.cloudsimplus.examples.TASimulation.Markov.MarkovLoadBalancer;
+
 import org.cloudsimplus.util.Log;
 
 /**
@@ -59,16 +61,16 @@ import org.cloudsimplus.util.Log;
  * @author Manoel Campos da Silva Filho
  * @since CloudSim Plus 1.0
  */
-public class Markov_E1 {
+public class PLAC_Demo {
     private static final int  HOSTS = 1;
-    private static final int  HOST_PES = 5;
-    private static final int  HOST_MIPS = 1000*5; // Milion Instructions per Second (MIPS)
-    private static final int  HOST_RAM = 512*5; //in Megabytes
-    private static final long HOST_BW = 1000*5; //in Megabits/s
-    private static final long HOST_STORAGE = 10_000*5; //in Megabytes
+    private int HOST_PES = 1;
+    private int HOST_MIPS = 1000; // Milion Instructions per Second (MIPS)
+    private int HOST_RAM = 512; //in Megabytes
+    private long HOST_BW = 1000; //in Megabits/s
+    private long HOST_STORAGE = 10_000; //in Megabytes
 
-    private static final int VMS = 5;
-    private final List<Integer> mips = new ArrayList<>(Arrays.asList(300,300,300,250,250));
+    private int VMS;
+    private List<Integer> mips = new ArrayList<>();
     private static final int VM_PES = 1;
     private static final int CLOUDLET_PES = 1;
 
@@ -80,20 +82,28 @@ public class Markov_E1 {
     private List<Double> initialExecutionTimes = new ArrayList<>();
     private Datacenter datacenter0;
     private Map<Integer, Integer> map;
-    private final ArrayList<Integer> taskLength = new ArrayList<>(Arrays.asList(6000, 5000, 4000, 3000, 2000, 1000));
-    private final ArrayList<Integer> initialCloudlets = new ArrayList<>();
+    private ArrayList<Integer> taskLength = new ArrayList<>();
+    private final List<Integer> initialCloudlets = new ArrayList<>();
     private final int interations = 50;
     public static void main(String[] args) {
-        new Markov_E1();
+        new PLAC_Demo();
     }
 
-    private Markov_E1() {
+    private PLAC_Demo() {
         /*Enables just some level of log messages.
           Make sure to import org.cloudsimplus.util.Log;*/
-        // Log.setLevel(ch.qos.logback.classic.Level.WARN);
+        Log.setLevel(ch.qos.logback.classic.Level.WARN);
 
         simulation = new CloudSimPlus();
-        datacenter0 = createDatacenter();
+
+        mips = getNumberofVMs();
+        HOST_PES = HOST_PES*mips.size();
+        HOST_MIPS = HOST_MIPS*mips.size();
+        HOST_RAM = HOST_RAM*mips.size();
+        HOST_BW = HOST_BW*mips.size();
+        HOST_STORAGE = HOST_STORAGE*mips.size();
+
+        datacenter0 = createDatacenter(HOST_PES, HOST_MIPS, HOST_RAM, HOST_BW, HOST_STORAGE);
 
         List<Integer> newCloudlets = getNumberOfNewCloudlets();
         //Creates a broker that is a software acting on behalf of a cloud customer to manage his/her VMs and Cloudlets
@@ -101,35 +111,69 @@ public class Markov_E1 {
 
         vmList = createVms(mips);
         System.out.println(vmList);
-        for(int i=0; i<20; i++){
+        int initialTask = getNumberOfInitialCloudlets();
+        for(int i=0; i<initialTask; i++){
             initialCloudlets.add(1000);
         }
 
         cloudletList_T0 = createCloudlets(initialCloudlets, initialCloudlets.size());
+        calculateInitialExecutionTimes(cloudletList_T0, vmList);
         cloudletList_T20 = createCloudlets(newCloudlets, newCloudlets.size());
-
-        MarkovLoadBalancer loadBalancer = new MarkovLoadBalancer();
+        int ant = vmList.size()+2;
+        PLACLoadBalancer plac = new PLACLoadBalancer(ant, 1, 3, 2, 8, 0.01);
         try {
-            List<Cloudlet> allocatedNewCloudlets = loadBalancer.getAllocatedNewCloudlets(cloudletList_T20, vmList, initialCloudlets.size());
-            broker0.submitVmList(vmList);
-            broker0.submitCloudletList(cloudletList_T0);
-            broker0.submitCloudletList(allocatedNewCloudlets, 20);
+            map = plac.implement(cloudletList_T20, vmList, interations, initialExecutionTimes);
         } catch (FileNotFoundException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();
         }
 
+        alloacateTaskPLAC(map);
+
+        broker0.submitVmList(vmList);
+        broker0.submitCloudletList(cloudletList_T0);
+        broker0.submitCloudletList(cloudletList_T20, 20);
+
         runSimulationAndPrintResults();
         System.out.println(getClass().getSimpleName() + " finished!");
     }
 
-     private void runSimulationAndPrintResults() {
+    private int getNumberOfInitialCloudlets(){
+        // preparing new cloudlets
+        Scanner scanner = new Scanner(System.in);
+        System.out.println("Enter number of initial tasks: ");
+        int initialCloudlets = scanner.nextInt();
+
+        return initialCloudlets;
+    }
+
+    private List<Integer> getNumberofVMs(){
+        List<Integer> VM_MIPS = new ArrayList<Integer>();
+        Scanner scanner = new Scanner(System.in);
+        System.out.println("Enter Number of VMs: ");
+        int VMs_Number = scanner.nextInt();
+
+        int counter = 0;
+        while (counter < VMs_Number) {
+            int remaining = VMs_Number - counter;
+            System.out.println("You have " + remaining + " VM left");
+            System.out.println("Give VM " + counter + " computational power: ");
+            int number = scanner.nextInt();
+            VM_MIPS.add(number);
+
+            counter++;
+        }
+        Collections.sort(VM_MIPS, Collections.reverseOrder());
+        return VM_MIPS;
+    }
+
+    private void runSimulationAndPrintResults() {
         simulation.start();
         final var cloudletFinishedList = broker0.getCloudletFinishedList();
         cloudletFinishedList.sort(Comparator.comparingLong(c -> c.getVm().getId()));
         try {
         // Specify the file path to export the output
-        String outputPath = "result/markov result/E1/MarkovE1_Outputtest.csv";
+        String outputPath = "result/plac result/E1/Plac_E1_Outputtest.csv";
 
         // Create a FileOutputStream to write the output to the file
         FileOutputStream fileOutputStream = new FileOutputStream(outputPath);
@@ -203,11 +247,16 @@ public class Markov_E1 {
 
     /**
      * Creates a Datacenter and its Hosts.
+     * @param hOST_STORAGE2
+     * @param hOST_BW2
+     * @param hOST_RAM2
+     * @param hOST_MIPS2
+     * @param hOST_PES2
      */
-    private Datacenter createDatacenter() {
+    private Datacenter createDatacenter(int HOST_PES, int HOST_MIPS, int HOST_RAM, long HOST_BW, long HOST_STORAGE) {
         final var hostList = new ArrayList<Host>(HOSTS);
         for(int i = 0; i < HOSTS; i++) {
-            final var host = createHost();
+            final var host = createHost(HOST_PES, HOST_MIPS, HOST_RAM, HOST_BW, HOST_STORAGE);
             hostList.add(host);
         }
 
@@ -215,7 +264,7 @@ public class Markov_E1 {
         return new DatacenterSimple(simulation, hostList);
     }
 
-    private Host createHost() {
+    private Host createHost(int HOST_PES, int HOST_MIPS, int HOST_RAM, long HOST_BW, long HOST_STORAGE) {
         final var peList = new ArrayList<Pe>(HOST_PES);
         //List of Host's CPUs (Processing Elements, PEs)
         for (int i = 0; i < HOST_PES; i++) {
@@ -235,7 +284,7 @@ public class Markov_E1 {
      */
     private List<Vm> createVms(List<Integer> mips) {
         final var vmList = new ArrayList<Vm>(VMS);
-        for (int i = 0; i < VMS; i++) {
+        for (int i = 0; i < mips.size(); i++) {
             //Uses a CloudletSchedulerTimeShared by default to schedule Cloudlets
             final var vm = new VmSimple(mips.get(i), VM_PES);
             vm.setRam(512).setBw(1000).setSize(10_000).setCloudletScheduler(new CloudletSchedulerSpaceShared());
@@ -265,6 +314,30 @@ public class Markov_E1 {
         return cloudletList;
     }
 
+    private void calculateInitialExecutionTimes(List<Cloudlet> cloudletList_T0, List<Vm> vmList){
+    int j = 0;
+    boolean resetJ = false; // Initialize the reset flag
+    for (int i = 0; i < cloudletList_T0.size(); i++) {
+        Double total = cloudletList_T0.get(i).getLength() / vmList.get(j).getMips();
+        cloudletList_T0.get(i).setVm(vmList.get(j));
+        if (resetJ) {
+            total += initialExecutionTimes.get(j);
+            initialExecutionTimes.set(j, total);
+            resetJ = false; // Reset the flag after processing the else-if block
+        } else {
+            initialExecutionTimes.add(total); 
+        }
+
+        j++;
+        
+        if (j == vmList.size()) {
+            j = 0;
+            resetJ = true; // Set the reset flag when j is reset to 0
+        }
+    }
+}
+
+
     private List<Integer> getNumberOfNewCloudlets(){
         List<Integer> newTasks = new ArrayList<Integer>();
 
@@ -272,41 +345,26 @@ public class Markov_E1 {
         Scanner scanner = new Scanner(System.in);
         System.out.println("Enter total of task desired in next timeslot: ");
         int newCloudlets = scanner.nextInt();
-        List<Integer> allocations = new ArrayList<Integer>(taskLength.size());
-       
-        int sum = 0;
-        int counter = 0;
-        int taskCounter = 0;
-        while (counter < taskLength.size()) {
-            System.out.println("How many " + taskLength.get(taskCounter) + " you want to have?");
-            int number = scanner.nextInt();
-            allocations.add(number);
 
-            sum += number;
-
-            int remaining = newCloudlets - sum;
-            System.out.println("Remaining: " + remaining + "\n");
-
-            if (sum > newCloudlets) {
-                sum = 0;
-                counter = 0;
-                remaining = 0;
-                System.out.println("Total sum exceeds " + newCloudlets + ". Restarting from the beginning.");
-                taskCounter=0;
-                allocations.clear();
-                continue;
-            }
-            taskCounter++;
-            counter++;
+        for (int i = 0; i < newCloudlets; i++) {
+            System.out.print("Enter Task #" + (i + 1) + " size : ");
+            int input = scanner.nextInt();
+            newTasks.add(input);
         }
 
-        for (int i = 0; i < taskLength.size(); i++) {
-            // for each task value, iterate num.get(i) times and add the task value to the result list
-            for (int j = 0; j < allocations.get(i); j++) {
-                newTasks.add(taskLength.get(i));
-            }
-        }
-
+        Collections.sort(newTasks, Collections.reverseOrder());
         return newTasks;
+    }
+
+    private void alloacateTaskPLAC(Map<Integer, Integer> map){
+        for (int i = 0; i < cloudletList_T20.size(); i++) {
+            if (map.containsKey(i)) {
+                int value = map.get(i);
+                // System.out.println("Key: " + i + ", Value: " + value);
+                cloudletList_T20.get(i).setVm(vmList.get(value));
+            } else {
+                System.out.println("No value found for key: " + i);
+            }
+        }
     }
 }

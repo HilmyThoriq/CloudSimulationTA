@@ -46,7 +46,6 @@ public class PLACLoadBalancer{
 		Map<Integer, Map<Integer,Double> > execTimes;
 		Map<Integer,Double> cc, pheromones;
 		
-		
 		execTimes = new HashMap<>();
 		cc = new HashMap<>();
 
@@ -75,16 +74,18 @@ public class PLACLoadBalancer{
 		for(int t=1;t<=tmax;t++){
 			Map<Integer,Double> eet = new HashMap<>();
 			for(int i=0;i<vms;i++)
-				eet.put(i,0.0);
+				eet.put(i,initialExecutionTimes.get(i));
 
 			for(int task=0;task<tasks;task++){
 				
 				Map<Integer,Double> probab = new HashMap<>();
 				Map<Integer,Double> eetTemp = new HashMap<>();
 				Map<Integer,Double> lbfValues = new HashMap<>();
-				for(int i=0;i<vms;i++)
-					eetTemp.put(i,eet.get(i)+execTimes.get(task).get(i)+initialExecutionTimes.get(i));
 
+				for(int i=0;i<vms;i++){
+					eetTemp.put(i,eet.get(i)+execTimes.get(task).get(i));
+				}
+		
 				double total = 0;
 				for (int i=0; i<vms; i++) {
 					total += eetTemp.get(i);
